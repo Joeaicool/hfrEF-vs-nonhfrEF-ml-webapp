@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 # Page config
 # =========================
 st.set_page_config(
-    page_title="Prediction Model with SHAP Visualization",
+    page_title="Explainable ML Model for Heart Failure Phenotype Classification (HFrEF vs HFmrEF/HFpEF)",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -64,7 +64,7 @@ st.markdown("""
 st.markdown(
     """
     <div class="title-box">
-        <h2 style="margin:0;">Prediction Model with SHAP Visualization</h2>
+        <h2 style="margin:0;">Explainable ML Model for Heart Failure Phenotype Classification (HFrEF vs HFmrEF/HFpEF)</h2>
     </div>
     """,
     unsafe_allow_html=True
@@ -80,13 +80,13 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Hero image (your uploaded image in repo root)
+# Hero image
 st.image("Heart Failure and Symptoms.jpg", caption="Heart Failure and Symptoms", use_container_width=True)
 
 # =========================
 # Load model and data
 # =========================
-MODEL_PATH = "RF_best.pkl"  # 你现在放在仓库根目录
+MODEL_PATH = "RF_best.pkl"  # 若你后续放入 saved_models，请改为 saved_models/RF_best.pkl
 DATA_FILE = "Final_Cleaned_Data.xlsx"
 TARGET_COL = "status"
 ID_COL = "ID"
@@ -158,7 +158,6 @@ if st.button("Predict", type="primary", use_container_width=True):
     pred = model.predict(X_input)[0]
     proba_hfref = model.predict_proba(X_input)[0][1] * 100 if hasattr(model, "predict_proba") else 0.0
 
-    # Top result cards
     c1, c2 = st.columns([1, 1])
 
     with c1:
@@ -190,15 +189,12 @@ if st.button("Predict", type="primary", use_container_width=True):
         fig_gauge.update_layout(height=260, margin=dict(l=20, r=20, t=40, b=10))
         st.plotly_chart(fig_gauge, use_container_width=True)
 
-    # SHAP block
     st.markdown('<div class="card"><b>Explainability (SHAP)</b></div>', unsafe_allow_html=True)
 
     try:
-        # RandomForest -> TreeExplainer
         explainer = shap.TreeExplainer(model)
         shap_values = explainer.shap_values(X_input)
 
-        # 兼容返回格式
         if isinstance(shap_values, list):
             sv_class1 = shap_values[1][0]
             base_vals = explainer.expected_value
@@ -211,7 +207,6 @@ if st.button("Predict", type="primary", use_container_width=True):
             sv_class1 = shap_values[0]
             base_class1 = explainer.expected_value if np.isscalar(explainer.expected_value) else explainer.expected_value[0]
 
-        # Waterfall + Force
         p1, p2 = st.columns(2)
 
         with p1:
@@ -241,7 +236,6 @@ if st.button("Predict", type="primary", use_container_width=True):
             st.pyplot(fig_force, use_container_width=True)
             plt.close(fig_force)
 
-        # Contribution table
         st.markdown("**Feature Contribution Table**")
         abs_sv = np.abs(sv_class1)
         total = abs_sv.sum() if abs_sv.sum() != 0 else 1.0
@@ -264,7 +258,6 @@ if st.button("Predict", type="primary", use_container_width=True):
             use_container_width=True
         )
 
-        # Contribution bar chart
         st.markdown("**Contribution Bar Chart**")
         fig_bar, ax = plt.subplots(figsize=(9, 4), dpi=220)
         bar_colors = ["#E53935" if v > 0 else "#1E88E5" for v in contribution_df["SHAP Value"]]
