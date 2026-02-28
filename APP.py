@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title='Best Model Predictor', layout='wide')
 st.title("Prediction Model with SHAP Visualization")
 
-model = joblib.load('saved_models/RF_best.pkl')
+model = joblib.load('RF_best.pkl')
 FEATURES = ['proBNP', 'HCT', 'Glb', 'GGT', 'BUN', 'IBil', 'CRP', 'Mono_Percent', 'B2_MG']
 DATA_FILE = 'Final_Cleaned_Data.xlsx'
 TARGET_COL = 'status'
@@ -51,8 +51,8 @@ X_input = pd.DataFrame([vals], columns=FEATURES)
 
 if st.button("Predict"):
     pred = model.predict(X_input)[0]
-    proba = model.predict_proba(X_input)[0][int(pred)] * 100 if hasattr(model, 'predict_proba') else 0.0
-    st.write(f"Based on feature values, predicted possibility of positive class is {proba:.2f}%")
+    proba = model.predict_proba(X_input)[0][1] * 100 if hasattr(model, 'predict_proba') else 0.0
+    st.write(f"Predicted risk of positive class (status=1): {proba:.2f}%")
 
     try:
         explainer = shap.Explainer(model, df_feat[FEATURES])
