@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 # Page config
 # =========================
 st.set_page_config(
-    page_title="Explainable ML Model for Heart Failure Phenotype Classification (HFrEF vs HFmrEF/HFpEF)",
+    page_title="Explainable ML Model for Heart Failure Phenotype Classification",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -20,41 +20,12 @@ st.set_page_config(
 # =========================
 st.markdown("""
 <style>
-    .main {
-        background-color: #f6f9fc;
-    }
-    .block-container {
-        padding-top: 1.2rem;
-        padding-bottom: 1rem;
-    }
-    .title-box {
-        background: linear-gradient(90deg, #0f4c81 0%, #1b6ca8 100%);
-        padding: 1rem 1.2rem;
-        border-radius: 12px;
-        color: white;
-        margin-bottom: 1rem;
-    }
-    .subtitle-box {
-        background: white;
-        padding: 0.8rem 1rem;
-        border-radius: 10px;
-        border-left: 5px solid #1b6ca8;
-        margin-bottom: 1rem;
-    }
-    .card {
-        background: white;
-        padding: 0.8rem 1rem;
-        border-radius: 10px;
-        border: 1px solid #e5edf5;
-        margin-bottom: 0.8rem;
-    }
-    .footer {
-        margin-top: 1.5rem;
-        padding-top: 0.6rem;
-        border-top: 1px solid #dbe5f0;
-        color: #4a6072;
-        font-size: 0.9rem;
-    }
+    .main { background-color: #f6f9fc; }
+    .block-container { padding-top: 1.2rem; padding-bottom: 1rem; }
+    .title-box { background: linear-gradient(90deg, #0f4c81 0%, #1b6ca8 100%); padding: 1rem 1.2rem; border-radius: 12px; color: white; margin-bottom: 1rem; }
+    .subtitle-box { background: white; padding: 0.8rem 1rem; border-radius: 10px; border-left: 5px solid #1b6ca8; margin-bottom: 1rem; }
+    .card { background: white; padding: 0.8rem 1rem; border-radius: 10px; border: 1px solid #e5edf5; margin-bottom: 0.8rem; }
+    .footer { margin-top: 1.5rem; padding-top: 0.6rem; border-top: 1px solid #dbe5f0; color: #4a6072; font-size: 0.9rem; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -66,8 +37,7 @@ st.markdown(
     <div class="title-box">
         <h2 style="margin:0;">Explainable ML Model for Heart Failure Phenotype Classification (HFrEF vs HFmrEF/HFpEF)</h2>
     </div>
-    """,
-    unsafe_allow_html=True
+    """, unsafe_allow_html=True
 )
 
 st.markdown(
@@ -76,31 +46,23 @@ st.markdown(
     <b>Clinical Objective:</b> Machine-learning classification of heart failure phenotype:
     <b>HFrEF (positive class = 1)</b> vs <b>non-HFrEF (HFmrEF + HFpEF)</b>.
     </div>
-    """,
-    unsafe_allow_html=True
+    """, unsafe_allow_html=True
 )
 
-# Hero image
 try:
     st.image("Heart Failure and Symptoms.jpg", caption="Heart Failure and Symptoms", use_container_width=True)
 except:
-    pass # 若图片不存在则静默跳过，避免应用崩溃
+    pass
 
 # =========================
-# Load model and data
+# 核心：加载模型并自动侦测特征
 # =========================
-MODEL_PATH = "RF_best.pkl"  
+MODEL_PATH = "RF_best.pkl"
 DATA_FILE = "Final_Cleaned_Data.xlsx"
 TARGET_COL = "status"
 ID_COL = "ID"
 
-# 【重要更新】：特征必须与模型训练时的输出严格一致！
-FEATURES = [
-    'proBNP', 'TBil', 'HCT', 'BUN', 'B2_MG', 'CRP', 
-    'DBil', 'UA', 'Glb', 'GGT', 'MCH', 'LDL_C', 'FIB'
-]
-
-@st.cache_resource
+# 移除 st.cache_resource，强制每次加载最新的模型文件，避免缓存Bug
 def load_model():
     return joblib.load(MODEL_PATH)
 
@@ -109,30 +71,31 @@ def load_data():
     try:
         return pd.read_excel(DATA_FILE)
     except Exception:
-        # 如果文件不存在，返回空DF以启用Fallback模式
         return pd.DataFrame()
 
 try:
     model = load_model()
+    # 【黑科技】自动从模型中读取它到底是用哪些特征训练的
+    if hasattr(model, "feature_names_in_"):
+        FEATURES = list(model.feature_names_in_)
+    else:
+        # 兼容旧版本sklearn的备选方案
+        FEATURES = ['proBNP', 'TBil', 'HCT', 'BUN', 'B2_MG', 'CRP', 'DBil', 'UA', 'Glb', 'GGT', 'MCH', 'LDL_C', 'FIB']
 except Exception as e:
-    st.error(f"模型加载失败，请确保 {MODEL_PATH} 存在且与当前环境兼容。错误信息: {e}")
+    st.error(f"模型加载失败，请确保 {MODEL_PATH} 存在。错误信息: {e}")
     st.stop()
     
 df = load_data()
 
-# 准备特征数据提取边界
+# =========================
+# 提取特征参考范围
+# =========================
 if not df.empty:
-    if ID_COL in df.columns:
-        df_feat = df.drop(columns=[TARGET_COL, ID_COL], errors="ignore")
-    else:
-        df_feat = df.drop(columns=[TARGET_COL], errors="ignore")
+    df_feat = df.drop(columns=[TARGET_COL, ID_COL, 'HFstatus'], errors="ignore")
 else:
     df_feat = pd.DataFrame()
 
-# =========================
-# Input panel
-# =========================
-st.markdown('<div class="card"><b>Patient Feature Input</b></div>', unsafe_allow_html=True)
+st.markdown(f'<div class="card"><b>Patient Feature Input ({len(FEATURES)} Variables Detected)</b></div>', unsafe_allow_html=True)
 
 feature_ranges = {}
 for f in FEATURES:
@@ -142,15 +105,13 @@ for f in FEATURES:
             mn = float(np.nanmin(col.values))
             mx = float(np.nanmax(col.values))
             dv = float(np.nanmedian(col.values))
-            if mn == mx:
-                mx = mn + 1.0
+            if mn == mx: mx = mn + 1.0
             feature_ranges[f] = {"type": "numerical", "min": mn, "max": mx, "default": dv}
         else:
             opts = [str(x) for x in col.dropna().unique().tolist()] or ["0", "1"]
             feature_ranges[f] = {"type": "categorical", "options": opts, "default": opts[0]}
     else:
-        # Fallback：若新特征在原Excel中找不到，提供一个安全的默认数值范围
-        feature_ranges[f] = {"type": "numerical", "min": 0.0, "max": 10000.0, "default": 50.0}
+        feature_ranges[f] = {"type": "numerical", "min": 0.0, "max": 1000.0, "default": 50.0}
 
 left, right = st.columns(2)
 vals = []
@@ -159,20 +120,14 @@ for i, (feat, p) in enumerate(feature_ranges.items()):
     box = left if i % 2 == 0 else right
     with box:
         if p["type"] == "numerical":
-            v = st.number_input(
-                f"{feat} ({p['min']:.3f} - {p['max']:.3f})",
-                min_value=float(p["min"]),
-                max_value=float(p["max"]),
-                value=float(p["default"])
-            )
+            v = st.number_input(f"{feat} ({p['min']:.2f} - {p['max']:.2f})", min_value=float(p["min"]), max_value=float(p["max"]), value=float(p["default"]))
         else:
             v = st.selectbox(f"{feat}", p["options"])
-            try:
-                v = float(v)
-            except:
-                pass
+            try: v = float(v)
+            except: pass
         vals.append(v)
 
+# 确保列名与模型训练时完全一致
 X_input = pd.DataFrame([vals], columns=FEATURES)
 
 # =========================
@@ -181,20 +136,18 @@ X_input = pd.DataFrame([vals], columns=FEATURES)
 if st.button("Predict", type="primary", use_container_width=True):
     try:
         pred = model.predict(X_input)[0]
-        proba_hfref = model.predict_proba(X_input)[0][1] * 100 if hasattr(model, "predict_proba") else 0.0
+        proba_hfref = model.predict_proba(X_input)[0][1] * 100
     except Exception as e:
-        st.error(f"预测失败，请检查模型与输入特征是否匹配。错误详情: {e}")
+        st.error(f"预测失败！请检查数据。错误详情: {e}")
         st.stop()
 
     c1, c2 = st.columns([1, 1])
-
     with c1:
         st.markdown('<div class="card"><b>Model Classification</b></div>', unsafe_allow_html=True)
         if pred == 1:
             st.success("Predicted phenotype: **HFrEF**")
         else:
             st.warning("Predicted phenotype: **non-HFrEF (HFmrEF + HFpEF)**")
-
         st.info(f"Predicted probability of **HFrEF**: **{proba_hfref:.2f}%**")
 
     with c2:
@@ -220,8 +173,18 @@ if st.button("Predict", type="primary", use_container_width=True):
     st.markdown('<div class="card"><b>Explainability (SHAP)</b></div>', unsafe_allow_html=True)
 
     try:
-        explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(X_input)
+        # 处理模型是 Pipeline 的情况 (拆解预处理和分类器)
+        if hasattr(model, "named_steps"):
+            preprocessor = model.named_steps['preprocessor']
+            clf = model.named_steps['classifier']
+            X_trans = preprocessor.transform(X_input)
+            X_trans_df = pd.DataFrame(X_trans, columns=FEATURES)
+        else:
+            clf = model
+            X_trans_df = X_input
+
+        explainer = shap.TreeExplainer(clf)
+        shap_values = explainer.shap_values(X_trans_df)
 
         if isinstance(shap_values, list):
             sv_class1 = shap_values[1][0]
@@ -236,17 +199,15 @@ if st.button("Predict", type="primary", use_container_width=True):
             base_class1 = explainer.expected_value if np.isscalar(explainer.expected_value) else explainer.expected_value[0]
 
         p1, p2 = st.columns(2)
-
         with p1:
             st.markdown("**SHAP Waterfall Plot**")
             exp = shap.Explanation(
                 values=sv_class1,
                 base_values=base_class1,
-                data=X_input.iloc[0].values,
+                data=X_input.iloc[0].values, # 用原始输入值展示，更直观
                 feature_names=FEATURES
             )
             fig_wf = plt.figure(figsize=(8, 5), dpi=200)
-            # max_display=10 能够显示前9个最重要特征并把剩下的聚合
             shap.plots.waterfall(exp, max_display=10, show=False)
             st.pyplot(fig_wf, use_container_width=True)
             plt.close(fig_wf)
@@ -286,18 +247,6 @@ if st.button("Predict", type="primary", use_container_width=True):
             }),
             use_container_width=True
         )
-
-        st.markdown("**Contribution Bar Chart**")
-        fig_bar, ax = plt.subplots(figsize=(9, 6), dpi=220)
-        bar_colors = ["#E53935" if v > 0 else "#1E88E5" for v in contribution_df["SHAP Value"]]
-        ax.barh(contribution_df["Feature"], contribution_df["SHAP Value"], color=bar_colors)
-        ax.axvline(0, color="black", linewidth=1)
-        ax.set_xlabel("SHAP value")
-        ax.set_title("Red: increase HFrEF risk | Blue: decrease HFrEF risk")
-        ax.invert_yaxis()
-        st.pyplot(fig_bar, use_container_width=True)
-        plt.close(fig_bar)
-
     except Exception as e:
         st.warning(f"SHAP visualization failed: {e}")
 
@@ -310,6 +259,5 @@ st.markdown(
         <b>Author:</b> Zhiping Meng<br>
         <b>Affiliation:</b> Guigang People's Hospital, Guigang, China
     </div>
-    """,
-    unsafe_allow_html=True
+    """, unsafe_allow_html=True
 )
