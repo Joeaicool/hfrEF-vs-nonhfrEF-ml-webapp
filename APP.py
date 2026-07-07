@@ -81,17 +81,24 @@ st.markdown(
 )
 
 # Hero image
-st.image("Heart Failure and Symptoms.jpg", caption="Heart Failure and Symptoms", use_container_width=True)
+try:
+    st.image("Heart Failure and Symptoms.jpg", caption="Heart Failure and Symptoms", use_container_width=True)
+except:
+    pass # 若图片不存在则静默跳过，避免应用崩溃
 
 # =========================
 # Load model and data
 # =========================
-MODEL_PATH = "RF_best.pkl"  # 若你后续放入 saved_models，请改为 saved_models/RF_best.pkl
+MODEL_PATH = "RF_best.pkl"  
 DATA_FILE = "Final_Cleaned_Data.xlsx"
 TARGET_COL = "status"
 ID_COL = "ID"
 
-FEATURES = ['proBNP', 'HCT', 'Glb', 'GGT', 'BUN', 'IBil', 'CRP', 'Mono_Percent', 'B2_MG']
+# 更新为最新的13个特征变量，注意顺序必须与训练RF_best.pkl时的特征顺序一致
+FEATURES = [
+    'proBNP', 'HCT', 'B2_MG', 'BUN', 'TBil', 'UA', 
+    'CRP', 'Glb', 'GGT', 'MCH', 'DBil', 'Hb', 'ALT'
+]
 
 @st.cache_resource
 def load_model():
@@ -99,15 +106,28 @@ def load_model():
 
 @st.cache_data
 def load_data():
-    return pd.read_excel(DATA_FILE)
+    try:
+        return pd.read_excel(DATA_FILE)
+    except Exception:
+        # 如果文件不存在，返回空DF以启用Fallback模式
+        return pd.DataFrame()
 
-model = load_model()
+try:
+    model = load_model()
+except Exception as e:
+    st.error(f"模型加载失败，请确保 {MODEL_PATH} 存在且与当前环境兼容。错误信息: {e}")
+    st.stop()
+    
 df = load_data()
 
-if ID_COL in df.columns:
-    df_feat = df.drop(columns=[TARGET_COL, ID_COL], errors="ignore")
+# 准备特征数据提取边界
+if not df.empty:
+    if ID_COL in df.columns:
+        df_feat = df.drop(columns=[TARGET_COL, ID_COL], errors="ignore")
+    else:
+        df_feat = df.drop(columns=[TARGET_COL], errors="ignore")
 else:
-    df_feat = df.drop(columns=[TARGET_COL], errors="ignore")
+    df_feat = pd.DataFrame()
 
 # =========================
 # Input panel
@@ -116,17 +136,21 @@ st.markdown('<div class="card"><b>Patient Feature Input</b></div>', unsafe_allow
 
 feature_ranges = {}
 for f in FEATURES:
-    col = df_feat[f]
-    if pd.api.types.is_numeric_dtype(col):
-        mn = float(np.nanmin(col.values))
-        mx = float(np.nanmax(col.values))
-        dv = float(np.nanmedian(col.values))
-        if mn == mx:
-            mx = mn + 1.0
-        feature_ranges[f] = {"type": "numerical", "min": mn, "max": mx, "default": dv}
+    if f in df_feat.columns:
+        col = df_feat[f]
+        if pd.api.types.is_numeric_dtype(col):
+            mn = float(np.nanmin(col.values))
+            mx = float(np.nanmax(col.values))
+            dv = float(np.nanmedian(col.values))
+            if mn == mx:
+                mx = mn + 1.0
+            feature_ranges[f] = {"type": "numerical", "min": mn, "max": mx, "default": dv}
+        else:
+            opts = [str(x) for x in col.dropna().unique().tolist()] or ["0", "1"]
+            feature_ranges[f] = {"type": "categorical", "options": opts, "default": opts[0]}
     else:
-        opts = [str(x) for x in col.dropna().unique().tolist()] or ["0", "1"]
-        feature_ranges[f] = {"type": "categorical", "options": opts, "default": opts[0]}
+        # Fallback：若新特征在原Excel中找不到，提供一个安全的默认数值范围
+        feature_ranges[f] = {"type": "numerical", "min": 0.0, "max": 10000.0, "default": 50.0}
 
 left, right = st.columns(2)
 vals = []
@@ -155,8 +179,12 @@ X_input = pd.DataFrame([vals], columns=FEATURES)
 # Prediction + Visualization
 # =========================
 if st.button("Predict", type="primary", use_container_width=True):
-    pred = model.predict(X_input)[0]
-    proba_hfref = model.predict_proba(X_input)[0][1] * 100 if hasattr(model, "predict_proba") else 0.0
+    try:
+        pred = model.predict(X_input)[0]
+        proba_hfref = model.predict_proba(X_input)[0][1] * 100 if hasattr(model, "predict_proba") else 0.0
+    except Exception as e:
+        st.error(f"预测失败，请检查模型与输入特征（13个）是否匹配。错误详情: {e}")
+        st.stop()
 
     c1, c2 = st.columns([1, 1])
 
@@ -218,7 +246,8 @@ if st.button("Predict", type="primary", use_container_width=True):
                 feature_names=FEATURES
             )
             fig_wf = plt.figure(figsize=(8, 4.2), dpi=200)
-            shap.plots.waterfall(exp, max_display=min(10, len(FEATURES)), show=False)
+            # max_display=10 能够显示前9个最重要特征并把剩下的聚合
+            shap.plots.waterfall(exp, max_display=10, show=False)
             st.pyplot(fig_wf, use_container_width=True)
             plt.close(fig_wf)
 
@@ -259,7 +288,7 @@ if st.button("Predict", type="primary", use_container_width=True):
         )
 
         st.markdown("**Contribution Bar Chart**")
-        fig_bar, ax = plt.subplots(figsize=(9, 4), dpi=220)
+        fig_bar, ax = plt.subplots(figsize=(9, 5), dpi=220)
         bar_colors = ["#E53935" if v > 0 else "#1E88E5" for v in contribution_df["SHAP Value"]]
         ax.barh(contribution_df["Feature"], contribution_df["SHAP Value"], color=bar_colors)
         ax.axvline(0, color="black", linewidth=1)
