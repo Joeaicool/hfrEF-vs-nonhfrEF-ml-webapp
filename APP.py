@@ -94,10 +94,10 @@ DATA_FILE = "Final_Cleaned_Data.xlsx"
 TARGET_COL = "status"
 ID_COL = "ID"
 
-# 更新为最新的13个特征变量，注意顺序必须与训练RF_best.pkl时的特征顺序一致
+# 【重要更新】：特征必须与模型训练时的输出严格一致！
 FEATURES = [
-    'proBNP', 'HCT', 'B2_MG', 'BUN', 'TBil', 'UA', 
-    'CRP', 'Glb', 'GGT', 'MCH', 'DBil', 'Hb', 'ALT'
+    'proBNP', 'TBil', 'HCT', 'BUN', 'B2_MG', 'CRP', 
+    'DBil', 'UA', 'Glb', 'GGT', 'MCH', 'LDL_C', 'FIB'
 ]
 
 @st.cache_resource
@@ -183,7 +183,7 @@ if st.button("Predict", type="primary", use_container_width=True):
         pred = model.predict(X_input)[0]
         proba_hfref = model.predict_proba(X_input)[0][1] * 100 if hasattr(model, "predict_proba") else 0.0
     except Exception as e:
-        st.error(f"预测失败，请检查模型与输入特征（13个）是否匹配。错误详情: {e}")
+        st.error(f"预测失败，请检查模型与输入特征是否匹配。错误详情: {e}")
         st.stop()
 
     c1, c2 = st.columns([1, 1])
@@ -245,7 +245,7 @@ if st.button("Predict", type="primary", use_container_width=True):
                 data=X_input.iloc[0].values,
                 feature_names=FEATURES
             )
-            fig_wf = plt.figure(figsize=(8, 4.2), dpi=200)
+            fig_wf = plt.figure(figsize=(8, 5), dpi=200)
             # max_display=10 能够显示前9个最重要特征并把剩下的聚合
             shap.plots.waterfall(exp, max_display=10, show=False)
             st.pyplot(fig_wf, use_container_width=True)
@@ -253,7 +253,7 @@ if st.button("Predict", type="primary", use_container_width=True):
 
         with p2:
             st.markdown("**SHAP Force Plot**")
-            fig_force = plt.figure(figsize=(8, 4.2), dpi=200)
+            fig_force = plt.figure(figsize=(8, 5), dpi=200)
             shap.force_plot(
                 base_class1,
                 sv_class1,
@@ -288,7 +288,7 @@ if st.button("Predict", type="primary", use_container_width=True):
         )
 
         st.markdown("**Contribution Bar Chart**")
-        fig_bar, ax = plt.subplots(figsize=(9, 5), dpi=220)
+        fig_bar, ax = plt.subplots(figsize=(9, 6), dpi=220)
         bar_colors = ["#E53935" if v > 0 else "#1E88E5" for v in contribution_df["SHAP Value"]]
         ax.barh(contribution_df["Feature"], contribution_df["SHAP Value"], color=bar_colors)
         ax.axvline(0, color="black", linewidth=1)
